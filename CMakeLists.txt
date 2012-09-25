@@ -8,9 +8,9 @@ IF (NOT CMAKE_BUILD_TYPE)
  SET(CMAKE_BUILD_TYPE "RelWithDebInfo")
 ENDIF (NOT CMAKE_BUILD_TYPE)
 
-find_package(catkin REQUIRED)
-catkin_stack()
-catkin_project(bulletsim)
+#find_package(catkin REQUIRED)
+#catkin_stack()
+#catkin_project(bulletsim)
 
 
 # external libraries
@@ -32,16 +32,15 @@ find_package(OpenCV REQUIRED)
 find_package(PCL REQUIRED)
 
 find_package(ROS REQUIRED COMPONENTS
- sensor_msgs geometry_msgs std_msgs
+sensor_msgs geometry_msgs std_msgs
  roscpp rosconsole message_filters
  cpp_common rostime roscpp_traits
  roscpp_serialization
- bulletsim_msgs
+bulletsim_msgs
 )
 
 
 set(BUILD_SHARED_LIBS 0)
-add_definitions(${PCL_DEFINITIONS})
 add_definitions("-DEIGEN_DEFAULT_TO_ROW_MAJOR")
 add_definitions("-DBT_NO_PROFILE")
 

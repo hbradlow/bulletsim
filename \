@@ -1,16 +1,10 @@
-include_directories( 
-    ${TETGEN_DIR}
-    ${PCL_INCLUDE_DIRS} 
-)
+include_directories( ${TETGEN_DIR}
+    ${PCL_INCLUDE_DIRS} )
 
-link_directories( 
-    ${TETGEN_DIR} 
-    ${PCL_LIBRARY_DIRS}
-)
+link_directories( ${TETGEN_DIR} )
 
+link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
-add_executable(test_cloud_reconstruction test_cloud_reconstruction.cpp)
-target_link_libraries(test_cloud_reconstruction clouds ${PCL_LIBRARIES})
 
 add_executable(test_simplescene test_simplescene.cpp)
 target_link_libraries(test_simplescene simulation robots)
@@ -66,6 +60,8 @@ target_link_libraries(test_hand simulation)
 #add_executable(test_cloud_filter test_cloud_filter.cpp)
 #target_link_libraries(test_cloud_filter clouds simulation ${PCL_LIBRARIES} pcl_io ${PCL_IO_LIBRARIES} ${PCL_COMMON_LIBRARIES} ${PCL_VISUALIZATION_LIBRARIES})
 
+add_executable(test_cloud_reconstruction test_cloud_reconstruction.cpp)
+target_link_libraries(test_cloud_reconstruction clouds simulation ${PCL_LIBRARIES} pcl_io)
 
 #add_executable(test_raven test_raven.cpp)
 #target_link_libraries(test_raven robots simulation)

@@ -2,13 +2,13 @@
 #include_directories("/opt/ros/fuerte/stacks/perception_pcl/pcl_ros/include")
 #link_directories("/opt/ros/fuerte/stacks/perception_pcl/pcl_ros/lib")
 
-include_directories("/opt/ros/fuerte/stacks/vision_opencv/cv_bridge/include")
-include_directories("/opt/ros/fuerte/stacks/geometry/tf/include"
-  "/opt/ros/fuerte/stacks/geometry/tf/msg_gen/cpp/include"
-  "/opt/ros/fuerte/stacks/geometry/tf/srv_gen/cpp/include")
+#include_directories("/opt/ros/fuerte/stacks/vision_opencv/cv_bridge/include")
+#include_directories("/opt/ros/fuerte/stacks/geometry/tf/include"
+#  "/opt/ros/fuerte/stacks/geometry/tf/msg_gen/cpp/include"
+#  "/opt/ros/fuerte/stacks/geometry/tf/srv_gen/cpp/include")
 
-link_directories("/opt/ros/fuerte/stacks/geometry/tf/lib"
-  "/opt/ros/fuerte/stacks/vision_opencv/cv_bridge/lib")
+#link_directories("/opt/ros/fuerte/stacks/geometry/tf/lib"
+#  "/opt/ros/fuerte/stacks/vision_opencv/cv_bridge/lib")
 
 include_directories(
     ${PCL_INCLUDE_DIRS}
@@ -24,9 +24,10 @@ link_directories(
 
 add_definitions("-DEIGEN_DEFAULT_TO_ROW_MAJOR")
 
-add_library(clouds geom.cpp get_table2.cpp get_chessboard_pose.cpp plane_finding.cpp utils_pcl.cpp cloud_ops.cpp utils_cv.cpp utils_ros.cpp table.cpp ros_robot.cpp)
+add_library(clouds geom.cpp get_table2.cpp get_chessboard_pose.cpp plane_finding.cpp utils_pcl.cpp cloud_ops.cpp utils_cv.cpp )
+#utils_ros.cpp table.cpp ros_robot.cpp)
 target_link_libraries(clouds utils ${PCL_LIBRARIES} ${OpenCV_LIBS} ${BULLET_LIBS})
-
+if(FALSE)
 add_executable(preprocessor_node preprocessor_node.cpp)
 target_link_libraries(preprocessor_node clouds comm utils ${PCL_LIBRARIES} ${OpenCV_LIBS} ${ROS_LIBRARIES} boost_signals tf cv_bridge)
 
@@ -56,3 +57,4 @@ target_link_libraries(robot_preprocessor_node clouds utils robots ${PCL_LIBRARIE
 
 add_executable(robot_self_filter robot_self_filter.cpp)
 target_link_libraries(robot_self_filter clouds utils robots ${PCL_LIBRARIES} ${ROS_LIBRARIES} tf)
+endif(FALSE)

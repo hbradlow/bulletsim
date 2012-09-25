@@ -550,9 +550,7 @@ ColorCloudPtr chessBoardCorners(const ColorCloudPtr in, int width_cb, int height
   vector<cv::Point3f> obj(width_cb*height_cb);
   for (int i=0; i<height_cb; i++)
     for (int j=0; j<width_cb; j++)
-    {
       obj[i*width_cb+j] = cv::Point3f(j, i, 0.0);
-    }
   bool found = findChessboardCorners(gray_image, cv::Size(width_cb,height_cb), corners); //, cv::CALIB_CB_FAST_CHECK);
   //printf("corners size %d\n", (int) corners.size());
   //	if (found) {
@@ -602,7 +600,6 @@ ColorCloudPtr chessBoardCorners(const ColorCloudPtr in, int width_cb, int height
 int getChessBoardPose(const ColorCloudPtr cloud_in, int width_cb, int height_cb, double square_size, Matrix4f& transform) {
   ColorCloudPtr cloud_corners = chessBoardCorners(cloud_in, width_cb, height_cb);
   int nAllPoints = width_cb * height_cb;
-  cout << nAllPoints << " " << cloud_corners->size() << endl;
   if (cloud_corners->size() == nAllPoints) {
     ColorCloudPtr cloudref_corners(new ColorCloud());
     for (int i=0; i<height_cb; i++) {
