@@ -602,7 +602,6 @@ ColorCloudPtr chessBoardCorners(const ColorCloudPtr in, int width_cb, int height
 int getChessBoardPose(const ColorCloudPtr cloud_in, int width_cb, int height_cb, double square_size, Matrix4f& transform) {
   ColorCloudPtr cloud_corners = chessBoardCorners(cloud_in, width_cb, height_cb);
   int nAllPoints = width_cb * height_cb;
-  cout << nAllPoints << " " << cloud_corners->size() << endl;
   if (cloud_corners->size() == nAllPoints) {
     ColorCloudPtr cloudref_corners(new ColorCloud());
     for (int i=0; i<height_cb; i++) {
