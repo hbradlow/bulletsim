@@ -1,16 +1,18 @@
 include_directories( 
     ${TETGEN_DIR}
     ${PCL_INCLUDE_DIRS} 
+    ${WM_INCLUDE_DIR}
 )
 
 link_directories( 
     ${TETGEN_DIR} 
     ${PCL_LIBRARY_DIRS}
+    ${WM_LIBRARY_DIR}
 )
 
 add_definitions(${PCL_DEFINITIONS})
 add_executable(test_cloud_reconstruction test_cloud_reconstruction.cpp)
-target_link_libraries(test_cloud_reconstruction clouds ${PCL_LIBRARIES})
+target_link_libraries(test_cloud_reconstruction clouds ${PCL_LIBRARIES} ${WM_LIBRARIES})
 
 add_executable(test_simplescene test_simplescene.cpp)
 target_link_libraries(test_simplescene simulation robots)

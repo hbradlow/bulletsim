@@ -1,5 +1,6 @@
 #include <pcl/io/pcd_io.h>
 #include <pcl/point_types.h>
+#include <math.h>
 
 #include <pcl/registration/icp.h>
 #include "clouds/utils_pcl.h"
@@ -12,6 +13,9 @@
 
 #include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/surface/mls.h>
+#include <pcl/visualization/cloud_viewer.h>
+#include <pcl/features/integral_image_normal.h>
+#include <pcl/features/normal_3d.h>
 
 #include <pcl/registration/transforms.h>
 #include "clouds/pcl_typedefs.h"
@@ -27,6 +31,9 @@ int main(int argc, char*argv[]){
     ColorCloudPtr master (new ColorCloud);
     ColorCloudPtr filtered (new ColorCloud);
     std::vector<int> index;
+    std::vector<Eigen::Matrix4f> transforms;
+    std::vector<ColorCloud> clouds;
+    std::vector<int> success_mask;
 
     if(argc>1){
         // Reorient each cloud to line the checkerboards up and concatenate them all into a "master" cloud
@@ -56,6 +63,7 @@ int main(int argc, char*argv[]){
             }
             current->width = current_tmp->width;
             current->height = current_tmp->height;
+            clouds.push_back(*current);
 
             Eigen::Matrix4f transform;
             //int found = getChessBoardPose(current,4,9,.0208,transform);
@@ -64,13 +72,84 @@ int main(int argc, char*argv[]){
             if(total_clouds%30==0)
                 cout << (float)total_clouds/argc * 100 << " percent complete..." << endl;
             if(found){
+                transforms.push_back(transform);
+                success_mask.push_back(1);
                 found_boards ++;
-                pcl::transformPointCloud(*current,*current,transform);
+            }
+            else
+            {
+                transforms.push_back(transform);
+                success_mask.push_back(0);
+                fails.push_back(argv[i]);
+            }
+            if(master->size()==0)
+                *master = *current;
+        }
+        //project all transforms to a plane
+        Eigen::Matrix3f A;
+        A <<    0,0,0,
+                0,0,0,
+                0,0,0;
+        Eigen::Vector3f b;
+        b << 0,0,0;
+        for(int i = 0; i<transforms.size(); i++)
+        {
+            if(success_mask[i]!=0){
+                // http://stackoverflow.com/questions/1400213/3d-least-squares-plane
+                Eigen::Vector3f p(transforms[i](0,3),transforms[i](1,3),transforms[i](2,3));
+                b += Eigen::Vector3f(p(0)*p(2),p(1)*p(2),p(2));
+                Eigen::Matrix3f a_tmp;
+                a_tmp <<    p(0)*p(0),p(0)*p(1),p(0),
+                            p(0)*p(1),p(1)*p(1),p(1),
+                            p(0),p(1),1;
+                A += a_tmp;
+            }
+        }
+        Eigen::Vector3f x = A.colPivHouseholderQr().solve(b); //plane => x(0)*x + x(1)*y + x(2) = z
+        for(int i = 0; i<transforms.size(); i++)
+        {
+            if(success_mask[i]!=0){
+                Eigen::Matrix4f t = transforms[i];
+                //cout << "Transform: " << t(0,3) << " " << t(1,3) << " " << t(2,3) << " " << endl;
+                Eigen::Vector3f p(transforms[i](0,3),transforms[i](1,3),transforms[i](2,3));
+                Eigen::Vector3f origin(0,0,x(2));
+                Eigen::Vector3f to_p = p-origin;
+                Eigen::Vector3f normal(x(0),x(1),-1);
+                
+                p = p-(normal*normal.dot(to_p));
+                
+                transforms[i] <<    t(0,0),t(0,1),t(0,2),p(0),
+                                    t(1,0),t(1,1),t(1,2),p(1),
+                                    t(2,0),t(2,1),t(2,2),p(2),
+                                    t(3,0),t(3,1),t(3,2),t(3,3);
+            }
+        }
 
-
-                if(master->size()>0){
-                    for(int i = 0; i<current->points.size(); i++){
-                        pcl::PointXYZRGB p1 = current->points[i];
+        int size = clouds.size();
+        for(int i = 0; i<clouds.size(); i++)
+        {
+            if(success_mask[i]!=0){
+                Eigen::Matrix4f transform;
+                transform <<    0,0,0,0,
+                                0,0,0,0,
+                                0,0,0,0,
+                                0,0,0,0;
+                float div = 0.;
+                for(int j = -0; j<=0; j++){
+                    int transform_index = ((i+j)%size);
+                    if(success_mask[transform_index]!=0){
+                        float factor = pow(.6,abs(j));
+                        transform += factor*transforms[transform_index];
+                        div += factor;
+                    }
+                }
+                if(div!=0){
+                    cout << "Transform: " << transform(0,3) << " " << transform(1,3) << " " << transform(2,3) << " " << endl;
+                    transform = transform/div;
+                    ColorCloudPtr c (new ColorCloud(clouds[i]));
+                    pcl::transformPointCloud(*c,*c,transform);
+                    for(int i = 0; i<c->points.size(); i++){
+                        pcl::PointXYZRGB p1 = c->points[i];
                         ColorPoint p2;
                         p2.x = p1.x;
                         p2.y = p1.y;
@@ -82,14 +161,15 @@ int main(int argc, char*argv[]){
                     }
                 }
             }
-            else
-                fails.push_back(argv[i]);
-            if(master->size()==0)
-                *master = *current;
         }
+        /*
+        //print out the clouds that failed to reorient
         cout << "Fails: " << endl;
         for(int i = 0; i<fails.size(); i++)
             cout << fails[i] << endl;
+        */
+
+        //calculate the success percentage
         float percent = (((float)found_boards)/total_clouds)*100.;
         cout << "Found checkerboard in " << found_boards << " of the " << total_clouds << " clouds provided - (" << percent << "%)." << endl;
         //filter the remaining "master" cloud
@@ -104,6 +184,7 @@ int main(int argc, char*argv[]){
         float y_lower_bound = -.1;
         float y_upper_bound = .1;
         float vertical_lower_bound = .01;
+
 
         //filter by location
         cout << "Filtering the master cloud by relative position to the checkboard..." << endl;
@@ -126,8 +207,6 @@ int main(int argc, char*argv[]){
         pass.filter (*filtered);
         *master = *filtered;
 
-        pcl::io::savePCDFileASCII ("intermediate.pcd", *master);
-
         //filter by statical outliers
         cout << "Filtering the master cloud for statistical outliers..." << endl;
         pcl::StatisticalOutlierRemoval<ColorPoint> sor;
@@ -137,7 +216,6 @@ int main(int argc, char*argv[]){
         sor.filter (*filtered);
         *master = *filtered;
         
-        pcl::io::savePCDFileASCII ("intermediate2.pcd", *master);
 
         //downsample the cloud to speed up later filters
         cout << "Downsampling the cloud..." << endl;
@@ -149,13 +227,14 @@ int main(int argc, char*argv[]){
         vg.filter (*filtered);
         *master = *filtered;
 
+        pcl::io::savePCDFileASCII ("intermediate2.pcd", *master);
+
         cout << "Reconstructing..." << endl;
         // Create a KD-Tree
         pcl::search::KdTree<ColorPoint>::Ptr tree (new pcl::search::KdTree<ColorPoint>);
         // Output has the PointNormal type in order to store the normals calculated by MLS
         pcl::PointCloud<ColorPoint> mls_points;
-        pcl::PointCloud<pcl::PointNormal>::Ptr mls_normals;
-        pcl::PointCloud<pcl::PointNormal>::Ptr mls_points_normals;
+        pcl::PointCloud<pcl::PointNormal>::Ptr mls_normals (new pcl::PointCloud<pcl::PointNormal>);
         // Init object (second point type is for the normals, even if unused)
         pcl::MovingLeastSquares<ColorPoint, pcl::PointNormal> mls;
 //        mls.setComputeNormals (true);
@@ -169,6 +248,23 @@ int main(int argc, char*argv[]){
         mls.reconstruct (mls_points);
         *master = mls_points;
 
+
+        pcl::PointCloud<pcl::Normal>::Ptr normals (new pcl::PointCloud<pcl::Normal>);
+
+        pcl::NormalEstimation<ColorPoint, pcl::Normal> ne;
+        ne.setInputCloud (master);
+        pcl::search::KdTree<ColorPoint>::Ptr tree2 (new pcl::search::KdTree<ColorPoint>);
+        // Create an empty kdtree representation, and pass it to the normal estimation object.
+        // Its content will be filled inside the object, based on the given input dataset (as no other search surface is given).
+        ne.setSearchMethod (tree2);
+
+        // Use all neighbors in a sphere of radius 3cm
+        ne.setRadiusSearch (0.01);
+
+        // Compute the features
+        ne.compute (*normals);
+        
+
         /*
         //filter by statical outliers
         cout << "Filtering the master cloud for statistical outliers..." << endl;
@@ -179,7 +275,6 @@ int main(int argc, char*argv[]){
         *master = *filtered;
         */
         
-        /*
         cout << "Closing the bottom of the shape..." << endl;
         ColorCloudPtr plate (new ColorCloud);
         pass.setInputCloud (master);
@@ -219,12 +314,12 @@ int main(int argc, char*argv[]){
                 master->push_back(p);
             }
         }
-        */
 
 
 
         //save the output to a file
         pcl::io::savePCDFileASCII ("test.pcd", *master);
+        pcl::io::savePCDFileASCII ("normals.pcd", *normals);
     }
     return (0);
 }
