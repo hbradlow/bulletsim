@@ -10,7 +10,7 @@ def sort_key(file):
 base_dir = "pcd_files2"
 files = sorted(os.listdir(base_dir),key=sort_key)
 args = ""
-for f in files[0::2]:
+for f in files[0::50]:
     args += base_dir + "/" + f + " "
 command = "./bin/test_cloud_reconstruction " + args
 if len(command)>6000:
