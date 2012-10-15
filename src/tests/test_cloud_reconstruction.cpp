@@ -25,6 +25,8 @@
 #include "clouds/cloud_ops.h"
 
 using namespace std;
+typedef pcl::PointCloud<pcl::PointNormal> HCloud;
+typedef pcl::PointCloud<pcl::PointNormal>::Ptr HCloudPtr;
 
 //these values are measured values from the setup
 //specifies the bouding box around the object being scanned
@@ -36,6 +38,9 @@ using namespace std;
 
 //size of leaf to use for downsampling
 #define LEAF_SIZE               0.002f
+
+//flags
+//#define CALCULATE_NORMALS
 
 void getColorCloudFromPointNormalCloud(pcl::PointCloud<pcl::PointNormal>::Ptr a, ColorCloudPtr b){
     b->clear();
@@ -73,14 +78,15 @@ int loadCloud(char * filename,pcl::PointCloud<pcl::PointNormal>::Ptr cloud,Color
 
     pcl::PointCloud<pcl::Normal>::Ptr normals (new pcl::PointCloud<pcl::Normal>);
     //calculate normals for the cloud - a very slow part of the process
-    /*
-    pcl::NormalEstimation<pcl::PointXYZRGBA, pcl::Normal> ne;
-    ne.setInputCloud (tmp);
-    pcl::search::KdTree<pcl::PointXYZRGBA>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZRGBA>);
-    ne.setSearchMethod (tree);
-    ne.setRadiusSearch (0.01);
-    ne.compute (*normals);
-    */
+    
+    #ifdef CALCULATE_NORMALS
+        pcl::NormalEstimation<pcl::PointXYZRGBA, pcl::Normal> ne;
+        ne.setInputCloud (tmp);
+        pcl::search::KdTree<pcl::PointXYZRGBA>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZRGBA>);
+        ne.setSearchMethod (tree);
+        ne.setRadiusSearch (0.01);
+        ne.compute (*normals);
+    #endif
 
     cloud->clear();
     color_cloud->clear();
@@ -113,6 +119,30 @@ int loadCloud(char * filename,pcl::PointCloud<pcl::PointNormal>::Ptr cloud,Color
     color_cloud->height = tmp->height;
     return 1;
 }
+void filterByLocation(HCloudPtr input,HCloudPtr output){
+    //strip out points not in the correct region
+    HCloudPtr tmp (new HCloud);
+    *tmp = *input;
+
+    pcl::PassThrough<pcl::PointNormal> pass;
+    pass.setInputCloud (tmp);
+    pass.setFilterFieldName ("z");
+    pass.setFilterLimits (VERTICAL_LOWER_BOUND, 1.0);
+    pass.filter (*output);
+    *tmp = *output;
+
+    pass.setInputCloud (tmp);
+    pass.setFilterFieldName ("y");
+    pass.setFilterLimits (Y_LOWER_BOUND, Y_UPPER_BOUND);
+    pass.filter (*output);
+    *tmp = *output;
+
+    pass.setInputCloud (tmp);
+    pass.setFilterFieldName ("x");
+    pass.setFilterLimits (X_LOWER_BOUND, X_UPPER_BOUND);
+    pass.filter (*output);
+    *tmp = *output;
+}
 Eigen::Vector3f fitPlaneToTransformTranslations(vector<Eigen::Matrix4f> transforms,vector<int> mask){
     //project all transforms to a plane - the transforms should lie on a circular path, project them to a plane to remove vertical noise
     // Plane fitting algorithm found here: http://stackoverflow.com/questions/1400213/3d-least-squares-plane
@@ -137,24 +167,54 @@ Eigen::Vector3f fitPlaneToTransformTranslations(vector<Eigen::Matrix4f> transfor
     Eigen::Vector3f x = A.colPivHouseholderQr().solve(b); //plane => x(0)*x + x(1)*y + x(2) = z
     return x;
 }
+Eigen::Vector3f projectToPlane(Eigen::Vector3f p,Eigen::Vector3f x){
+    Eigen::Vector3f origin(0,0,x(2));
+    Eigen::Vector3f to_p = p-origin;
+    Eigen::Vector3f normal(x(0),x(1),-1);
+    
+    return p-(normal*normal.dot(to_p));
+}
 void projectTransformTranslationsToPlane(Eigen::Vector3f x, vector<Eigen::Matrix4f>* transforms, vector<int> mask){
     //project the translation component of the transforms onto a plane defined by the parameters stored in 'x'
+    float angle = M_PI*2./transforms->size();
+    Eigen::Vector3f previous;
+    float previous_i;
     for(int i = 0; i<transforms->size(); i++)
     {
+        Eigen::Matrix4f t = (*transforms)[i];
+        Eigen::Vector3f p(t(0,3),t(1,3),t(2,3));
+        Eigen::Vector3f origin(0,0,x(2));
+        Eigen::Vector3f to_p = p-origin;
+        Eigen::Vector3f normal(x(0),x(1),-1);
+        
+        p = p-(normal*normal.dot(to_p));
+
         if(mask[i]!=0){
-            Eigen::Matrix4f t = (*transforms)[i];
-            Eigen::Vector3f p(t(0,3),t(1,3),t(2,3));
-            Eigen::Vector3f origin(0,0,x(2));
-            Eigen::Vector3f to_p = p-origin;
-            Eigen::Vector3f normal(x(0),x(1),-1);
-            
-            p = p-(normal*normal.dot(to_p));
-            
-            (*transforms)[i] <<    t(0,0),t(0,1),t(0,2),p(0),
-                                t(1,0),t(1,1),t(1,2),p(1),
-                                t(2,0),t(2,1),t(2,2),p(2),
-                                t(3,0),t(3,1),t(3,2),t(3,3);
+            previous = p;
+            previous_i = i;
         }
+        else{
+            float o = 0;
+            float time = 0;
+            Eigen::Vector3f p2;
+            Eigen::Matrix4f t2;
+            for(int j = i+1; i<transforms->size(); j++){
+                if(mask[j]!=0)
+                {
+                    o = (j-previous_i)*angle;
+                    time = ((float)(i-previous_i))/(j-previous_i);
+                    t2 = (*transforms)[j];
+                    p2 << t2(0,3),t2(1,3),t2(2,3);
+                    break;
+                }
+            }
+            p = previous*(sin((1-time)*o)/sin(o)) + p2*(sin(time*o)/sin(o));
+        }
+        
+        (*transforms)[i] <<    t(0,0),t(0,1),t(0,2),p(0),
+                            t(1,0),t(1,1),t(1,2),p(1),
+                            t(2,0),t(2,1),t(2,2),p(2),
+                            t(3,0),t(3,1),t(3,2),t(3,3);
     }
 }
 Eigen::Matrix4f getSmoothedTransform(vector<Eigen::Matrix4f> transforms, int index, float alpha, int radius,vector<int> mask){
@@ -181,40 +241,43 @@ Eigen::Matrix4f getSmoothedTransform(vector<Eigen::Matrix4f> transforms, int ind
     return transform;
 }
 int getTransformForICPAlignment(pcl::PointCloud<pcl::PointNormal>::Ptr master, pcl::PointCloud<pcl::PointNormal>::Ptr current, Eigen::Matrix4f* transform){
-
+    //temp clouds
     pcl::PointCloud<pcl::PointNormal>::Ptr master_filtered (new pcl::PointCloud<pcl::PointNormal>);
     pcl::PointCloud<pcl::PointNormal>::Ptr current_filtered (new pcl::PointCloud<pcl::PointNormal>);
     pcl::PointCloud<pcl::PointNormal>::Ptr master_filtered_nonan (new pcl::PointCloud<pcl::PointNormal>);
     pcl::PointCloud<pcl::PointNormal>::Ptr current_filtered_nonan (new pcl::PointCloud<pcl::PointNormal>);
-    vector<int> index;
+    vector<int> index; //unused, just to store output from removeNaNFromPointCloud
+
+    filterByLocation(current,current);
+
+    *master_filtered_nonan = *master;
     pcl::removeNaNFromPointCloud(*current,index);
-    pcl::removeNaNFromPointCloud(*master,index);
 
-    /*
     pcl::VoxelGrid<pcl::PointNormal> vg;
-
     vg.setInputCloud (master_filtered_nonan);
     vg.setLeafSize (LEAF_SIZE,LEAF_SIZE,LEAF_SIZE);
     vg.filter (*master_filtered);
 
-    vg.setInputCloud (current_filtered_nonan);
+    vg.setInputCloud (current);
     vg.setLeafSize (LEAF_SIZE,LEAF_SIZE,LEAF_SIZE);
     vg.filter (*current_filtered);
 
-    pcl::removeNaNFromPointCloud(*current_filtered,*current_filtered,index);
-    pcl::removeNaNFromPointCloud(*master_filtered,*master_filtered,index);
-    */
+    pcl::removeNaNFromPointCloud(*current_filtered,index);
+    pcl::removeNaNFromPointCloud(*master_filtered,index);
+
+    pcl::io::savePCDFileASCII ("intermediate2.pcd", *master_filtered);
 
     if(current_filtered->size()>0 && master_filtered->size()>0){
         pcl::IterativeClosestPointNonLinear<pcl::PointNormal, pcl::PointNormal> icp; 
         typedef pcl::registration::TransformationEstimationPointToPlaneLLS<pcl::PointNormal, pcl::PointNormal> PointToPlane;
         boost::shared_ptr<PointToPlane> point_to_plane(new PointToPlane);
         icp.setTransformationEstimation(point_to_plane);
-        icp.setInputCloud(current);
-        icp.setInputTarget(master);
+        icp.setInputCloud(current_filtered);
+        icp.setInputTarget(master_filtered);
         pcl::PointCloud<pcl::PointNormal> Final;
         icp.align(Final);
         if(icp.hasConverged()){
+            cout <<"Converged" << endl;
             *transform = icp.getFinalTransformation();
             return 1;
         }
@@ -278,6 +341,7 @@ int main(int argc, char*argv[]){
     //keep track of all the frames
     std::vector<Eigen::Matrix4f> transforms; //the transform of the checkerboard for the frame
     std::vector< pcl::PointCloud<pcl::PointNormal> > clouds; //the cloud for a frame
+    std::vector< pcl::PointCloud<pcl::PointNormal> > clouds1; //the cloud for a frame
     std::vector<int> success_mask; //indicates if a checkerboard was located in the frame
 
     if(argc>1){
@@ -324,9 +388,9 @@ int main(int argc, char*argv[]){
         pcl::PointCloud<pcl::PointNormal>::Ptr master1 (new pcl::PointCloud<pcl::PointNormal>);
         for(int i = 0; i<clouds.size(); i++)
         {
-            if(success_mask[i]!=0){
-                Eigen::Matrix4f transform = getSmoothedTransform(transforms,i,0.6,0,success_mask); //exponential smooth of the transforms - 0 means no smoothing
-                
+            if(success_mask[i]!=-1){
+//                Eigen::Matrix4f transform = getSmoothedTransform(transforms,i,0.6,0,success_mask); //exponential smooth of the transforms - 0 means no smoothing
+                Eigen::Matrix4f transform = transforms[i]; 
                 //print some information about the transform for debugging
                 Eigen::Matrix3f rotation;
                 rotation <<     transform(0,0),transform(0,1),transform(0,2),
@@ -350,31 +414,13 @@ int main(int argc, char*argv[]){
                 pcl::PointCloud<pcl::PointNormal>::Ptr c (new pcl::PointCloud<pcl::PointNormal>(clouds[i]));
                 pcl::transformPointCloudWithNormals(*c,*c,transform);
                 
+                clouds1.push_back(*c);
                 for(int j = 0; j<c->points.size(); j++){
                     pcl::PointNormal p1 = c->points[j];
                     master1->push_back(p1);
                 }
             }
         }
-        for(int i = 0; i< clouds.size(); i++){
-            pcl::PointCloud<pcl::PointNormal>::Ptr c (new pcl::PointCloud<pcl::PointNormal>(clouds[i]));
-            Eigen::Matrix4f transform;
-            cout << "HERE" << endl;
-            if(getTransformForICPAlignment(master1,c,&transform)){
-                pcl::transformPointCloudWithNormals(*c,*c,transform);
-                for(int j = 0; j<c->points.size(); j++){
-                    pcl::PointNormal p1 = c->points[j];
-                    master->push_back(p1);
-                }
-            }
-        }
-
-        /*
-        //print out the clouds that failed to reorient
-        cout << "Fails: " << endl;
-        for(int i = 0; i<fails.size(); i++)
-            cout << fails[i] << endl;
-        */
 
         //calculate the success percentage
         float percent = (((float)found_boards)/total_clouds)*100.;
@@ -385,27 +431,27 @@ int main(int argc, char*argv[]){
         //filter by location
         cout << "Filtering the master cloud by relative position to the checkboard..." << endl;
 
-        //strip out points not in the correct region
-        pcl::PassThrough<pcl::PointNormal> pass;
-        pass.setInputCloud (master);
-        pass.setFilterFieldName ("z");
-        pass.setFilterLimits (VERTICAL_LOWER_BOUND, 1.0);
-        pass.filter (*filtered);
-        *master = *filtered;
+        filterByLocation(master1,master1);
 
-        pass.setInputCloud (master);
-        pass.setFilterFieldName ("y");
-        pass.setFilterLimits (Y_LOWER_BOUND, Y_UPPER_BOUND);
-        pass.filter (*filtered);
-        *master = *filtered;
-
-        pass.setInputCloud (master);
-        pass.setFilterFieldName ("x");
-        pass.setFilterLimits (X_LOWER_BOUND, X_UPPER_BOUND);
-        pass.filter (*filtered);
-        *master = *filtered;
-
+        /*
+        for(int i = 0; i< clouds1.size(); i++){
+            pcl::PointCloud<pcl::PointNormal>::Ptr c (new pcl::PointCloud<pcl::PointNormal>(clouds1[i]));
+            Eigen::Matrix4f transform;
+            cout << "HERE" << endl;
+            if(getTransformForICPAlignment(master1,c,&transform)){
+                pcl::transformPointCloudWithNormals(*c,*c,transform);
+                cout << transform << endl;
+                pcl::io::savePCDFileASCII ("intermediate3.pcd", *c);
+                for(int j = 0; j<c->points.size(); j++){
+                    pcl::PointNormal p1 = c->points[j];
+                    master->push_back(p1);
+                }
+            }
+        }
+        */
+        *master = *master1;
         pcl::io::savePCDFileASCII ("intermediate.pcd", *master);
+
 
         //filter by statical outliers
         cout << "Filtering the master cloud for statistical outliers..." << endl;

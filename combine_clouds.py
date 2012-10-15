@@ -7,10 +7,10 @@ import sh
 def sort_key(file):
     number = re.match(r'.*?(\d+)\.pcd',file).group(1)
     return int(number)
-base_dir = "pcd_files2"
+base_dir = "pcd_files"
 files = sorted(os.listdir(base_dir),key=sort_key)
 args = ""
-for f in files[0::100]:
+for f in files[0::50]:
     args += base_dir + "/" + f + " "
 command = "./bin/test_cloud_reconstruction " + args
 if len(command)>600:
@@ -59,8 +59,8 @@ def plot(points,label):
     plt.show()
 
 debug = False
+plot(translations,"Translations")
 if debug:
-    plot(translations,"Translations")
     plot(xs,"Affect on X axis")
     plot(ys,"Affect on Y axis")
     plot(zs,"Affect on Z axis")
