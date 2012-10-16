@@ -7,7 +7,7 @@ import sh
 def sort_key(file):
     number = re.match(r'.*?(\d+)\.pcd',file).group(1)
     return int(number)
-base_dir = "pcd_files"
+base_dir = "pcd_files2"
 files = sorted(os.listdir(base_dir),key=sort_key)
 args = ""
 for f in files[0::50]:
@@ -27,25 +27,26 @@ ys = []
 zs = []
 while True:
     line = proc.stdout.readline()
-    print line
     if line == "":
         break;
-    if "Transform:" in line:
+    elif "Transform:" in line:
         #extract the list of poses from the output
         match = re.match("^Transform:\s*(.+?)\s+(.+?)\s+(.+?)\s*$",line)
         translations.append((match.group(1),match.group(2),match.group(3)))
-    if "X:" in line:
+    elif "X:" in line:
         #extract the list of poses from the output
         match = re.match("^X:\s*(.+?)\s+(.+?)\s+(.+?)\s*$",line)
         xs.append((match.group(1),match.group(2),match.group(3)))
-    if "Y:" in line:
+    elif "Y:" in line:
         #extract the list of poses from the output
         match = re.match("^Y:\s*(.+?)\s+(.+?)\s+(.+?)\s*$",line)
         ys.append((match.group(1),match.group(2),match.group(3)))
-    if "Z:" in line:
+    elif "Z:" in line:
         #extract the list of poses from the output
         match = re.match("^Z:\s*(.+?)\s+(.+?)\s+(.+?)\s*$",line)
         zs.append((match.group(1),match.group(2),match.group(3)))
+    else:
+        print line
         
 def plot(points,label):
     import matplotlib.pyplot as plt
