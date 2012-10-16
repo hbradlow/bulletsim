@@ -10,7 +10,7 @@ def sort_key(file):
 base_dir = "pcd_files2"
 files = sorted(os.listdir(base_dir),key=sort_key)
 args = ""
-for f in files[0::50]:
+for f in files[0::30]:
     args += base_dir + "/" + f + " "
 command = "./bin/test_cloud_reconstruction " + args
 if len(command)>600:
@@ -56,6 +56,8 @@ def plot(points,label):
     x = [float(a[0]) for a in points]
     y = [float(a[1]) for a in points]
     z = [float(a[2]) for a in points]
+    def ave(l):
+        return reduce(lambda x,y: x+y,l)/len(l)
     ax.scatter(x,y,z)
     plt.show()
 

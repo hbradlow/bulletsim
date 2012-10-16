@@ -40,7 +40,7 @@ typedef pcl::PointCloud<pcl::PointNormal>::Ptr HCloudPtr;
 #define LEAF_SIZE               0.002f
 
 //flags
-//#define CALCULATE_NORMALS
+#define CALCULATE_NORMALS
 
 void getColorCloudFromPointNormalCloud(pcl::PointCloud<pcl::PointNormal>::Ptr a, ColorCloudPtr b){
     b->clear();
@@ -79,14 +79,12 @@ int loadCloud(char * filename,pcl::PointCloud<pcl::PointNormal>::Ptr cloud,Color
     pcl::PointCloud<pcl::Normal>::Ptr normals (new pcl::PointCloud<pcl::Normal>);
     //calculate normals for the cloud - a very slow part of the process
     
-    #ifdef CALCULATE_NORMALS
         pcl::NormalEstimation<pcl::PointXYZRGBA, pcl::Normal> ne;
         ne.setInputCloud (tmp);
         pcl::search::KdTree<pcl::PointXYZRGBA>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZRGBA>);
         ne.setSearchMethod (tree);
         ne.setRadiusSearch (0.01);
         ne.compute (*normals);
-    #endif
 
     cloud->clear();
     color_cloud->clear();
@@ -167,7 +165,7 @@ Eigen::Vector3f fitPlaneToTransformTranslations(vector<Eigen::Matrix4f> transfor
     Eigen::Vector3f x = A.colPivHouseholderQr().solve(b); //plane => x(0)*x + x(1)*y + x(2) = z
     return x;
 }
-Eigen::Vector3f projectToPlane(Eigen::Vector3f p,Eigen::Vector3f x){
+Eigen::Vector3f projectPointToPlane(Eigen::Vector3f p,Eigen::Vector3f x){
     Eigen::Vector3f origin(0,0,x(2));
     Eigen::Vector3f to_p = p-origin;
     Eigen::Vector3f normal(x(0),x(1),-1);
@@ -186,6 +184,27 @@ Eigen::Vector3f projectToPlane(Eigen::Vector3f p,Eigen::Vector3f x){
     p4_tmp = transform * p4_tmp;
     return Eigen::Vector3f(p4_tmp(0),p4_tmp(1),p4_tmp(2));
 }
+Eigen::Matrix4f projectTransformToPlane(Eigen::Matrix4f t,Eigen::Vector3f x){
+    Eigen::Vector3f origin(0,0,x(2));
+    Eigen::Vector3f p(t(0,3),t(1,3),t(2,3));
+    Eigen::Vector3f to_p = p-origin;
+    Eigen::Vector3f normal(x(0),x(1),-1);
+
+    float theta = atan(-normal(2)/normal(1));
+    float alpha = atan(-(cos(theta)*normal(1) + sin(theta)*normal(2))/normal(0));
+    Eigen::Matrix4f transform;
+    transform <<    cos(alpha),-sin(alpha)*cos(theta),sin(alpha)*sin(theta),    -origin(0),
+                    sin(alpha),cos(alpha)*cos(theta),-cos(alpha)*sin(theta),    -origin(1),
+                    0,sin(theta),cos(theta),                                    -origin(2),
+                    0,0,0,1;
+    
+    Eigen::Vector3f p3_tmp = p-(normal*normal.dot(to_p));
+    Eigen::Matrix4f out(t);
+    out(0,3) = p3_tmp(0);
+    out(1,3) = p3_tmp(1);
+    out(2,3) = p3_tmp(2);
+    return transform * out;
+}
 void projectTransformTranslationsToPlane(Eigen::Vector3f x, vector<Eigen::Matrix4f>* transforms, vector<int> mask){
     //project the translation component of the transforms onto a plane defined by the parameters stored in 'x'
     float angle = M_PI*2./transforms->size();
@@ -197,13 +216,12 @@ void projectTransformTranslationsToPlane(Eigen::Vector3f x, vector<Eigen::Matrix
     {
         Eigen::Matrix4f t = (*transforms)[i];
         Eigen::Vector3f p(t(0,3),t(1,3),t(2,3));
-        p = projectToPlane(p,x);
+//p = projectPointToPlane(p,x);
 
         if(mask[i]!=0){
             previous = p;
             previous_t = t;
             previous_i = i;
-        cout << "Transform: " << p(0) << " " << p(1) << " " << p(2) << " " << endl;
         }
         else{
             t = previous_t;
@@ -218,7 +236,7 @@ void projectTransformTranslationsToPlane(Eigen::Vector3f x, vector<Eigen::Matrix
                     time = ((float)(i-previous_i))/(j-previous_i);
                     t2 = (*transforms)[j];
                     p2 << t2(0,3),t2(1,3),t2(2,3);
-                    p2 = projectToPlane(p2,x);
+                    p2 = projectPointToPlane(p2,x);
                     break;
                 }
             }
@@ -228,6 +246,7 @@ void projectTransformTranslationsToPlane(Eigen::Vector3f x, vector<Eigen::Matrix
             t = previous_t*(1-time) + t2*time;
             p << t(0,3),t(1,3),t(2,3);
         }
+        cout << "Transform: " << p(0) << " " << p(1) << " " << p(2) << " " << endl;
         (*transforms)[i] <<    t(0,0),t(0,1),t(0,2),p(0),
                             t(1,0),t(1,1),t(1,2),p(1),
                             t(2,0),t(2,1),t(2,2),p(2),
@@ -400,12 +419,15 @@ int main(int argc, char*argv[]){
         }
 
         Eigen::Vector3f x = fitPlaneToTransformTranslations(transforms,success_mask); //get the parameters of the best fit plane to the checkerboard translations
+        for(int i  = 0; i< transforms.size(); i++){
+            //transforms[i] = projectTransformToPlane(transforms[i],x);
+        }
         projectTransformTranslationsToPlane(x,&transforms,success_mask); //project the translations onto the plane
 
         pcl::PointCloud<pcl::PointNormal>::Ptr master1 (new pcl::PointCloud<pcl::PointNormal>);
         for(int i = 0; i<clouds.size(); i++)
         {
-            if(success_mask[i]!=-1){
+            if(success_mask[i]!=0){
 //                Eigen::Matrix4f transform = getSmoothedTransform(transforms,i,0.6,0,success_mask); //exponential smooth of the transforms - 0 means no smoothing
                 Eigen::Matrix4f transform = transforms[i]; 
                 //print some information about the transform for debugging
@@ -438,7 +460,6 @@ int main(int argc, char*argv[]){
                 }
             }
         }
-        pcl::io::savePCDFileASCII ("intermediate4.pcd", *master1);
 
         //calculate the success percentage
         float percent = (((float)found_boards)/total_clouds)*100.;
