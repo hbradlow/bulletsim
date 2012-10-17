@@ -76,6 +76,7 @@ int loadCloud(char * filename,pcl::PointCloud<pcl::PointNormal>::Ptr cloud,Color
     pass.filter (*tmp_filtered);
     *tmp = *tmp_filtered;
 
+    /*
     pcl::PointCloud<pcl::Normal>::Ptr normals (new pcl::PointCloud<pcl::Normal>);
     //calculate normals for the cloud - a very slow part of the process
     
@@ -85,12 +86,14 @@ int loadCloud(char * filename,pcl::PointCloud<pcl::PointNormal>::Ptr cloud,Color
         ne.setSearchMethod (tree);
         ne.setRadiusSearch (0.01);
         ne.compute (*normals);
+    */
 
     cloud->clear();
     color_cloud->clear();
     for(int i = 0; i<tmp->points.size(); i++){
         pcl::PointXYZRGBA p1 = tmp->points[i];
-        pcl::Normal n1 = normals->points[i];
+     //   pcl::Normal n1 = normals->points[i];
+        pcl::Normal n1;
         n1.normal_x = 0;
         n1.normal_y = 0;
         n1.normal_z = 1;
@@ -377,7 +380,7 @@ int main(int argc, char*argv[]){
     //keep track of all the frames
     std::vector<Eigen::Matrix4f> transforms; //the transform of the checkerboard for the frame
     std::vector< pcl::PointCloud<pcl::PointNormal> > clouds; //the cloud for a frame
-    std::vector< pcl::PointCloud<pcl::PointNormal> > clouds1; //the cloud for a frame
+    std::vector< pcl::PointCloud<pcl::PointNormal> > clouds_raw; //the cloud for a frame
     std::vector<int> success_mask; //indicates if a checkerboard was located in the frame
 
     if(argc>1){
@@ -400,7 +403,7 @@ int main(int argc, char*argv[]){
 
             total_clouds ++;
             //update the user of the progress
-            if(total_clouds%3==0)
+            if(total_clouds%2==0)
                 cout << (float)total_clouds/argc * 100 << " percent complete..." << endl;
 
             //calculate the transform of the board
@@ -424,7 +427,7 @@ int main(int argc, char*argv[]){
         }
         projectTransformTranslationsToPlane(x,&transforms,success_mask); //project the translations onto the plane
 
-        pcl::PointCloud<pcl::PointNormal>::Ptr master1 (new pcl::PointCloud<pcl::PointNormal>);
+        pcl::PointCloud<pcl::PointNormal>::Ptr master_raw (new pcl::PointCloud<pcl::PointNormal>);
         for(int i = 0; i<clouds.size(); i++)
         {
             if(success_mask[i]!=0){
@@ -451,12 +454,28 @@ int main(int argc, char*argv[]){
 
                 //transform the cloud and concatenate it with "master"
                 pcl::PointCloud<pcl::PointNormal>::Ptr c (new pcl::PointCloud<pcl::PointNormal>(clouds[i]));
+                pcl::PointCloud<pcl::Normal>::Ptr normals (new pcl::PointCloud<pcl::Normal>);
+                pcl::NormalEstimation<pcl::PointNormal, pcl::Normal> ne;
+                ne.setInputCloud (c);
+                pcl::search::KdTree<pcl::PointNormal>::Ptr tree (new pcl::search::KdTree<pcl::PointNormal>);
+                ne.setSearchMethod (tree);
+                ne.setRadiusSearch (0.01);
+                ne.compute (*normals);
+
+                for(int j = 0; j<c->points.size(); j++){
+                    pcl::PointNormal* p1 = &(c->points[j]);
+                    pcl::Normal n1 = normals->points[j];
+                    p1->normal_x = n1.normal_x;
+                    p1->normal_y = n1.normal_y;
+                    p1->normal_z = n1.normal_z;
+                }
                 pcl::transformPointCloudWithNormals(*c,*c,transform);
-                
-                clouds1.push_back(*c);
+                filterByLocation(c,c);
+
+                clouds_raw.push_back(*c);
                 for(int j = 0; j<c->points.size(); j++){
                     pcl::PointNormal p1 = c->points[j];
-                    master1->push_back(p1);
+                    master_raw->push_back(p1);
                 }
             }
         }
@@ -469,15 +488,15 @@ int main(int argc, char*argv[]){
 
         //filter by location
         cout << "Filtering the master cloud by relative position to the checkboard..." << endl;
-
-        filterByLocation(master1,master1);
+//        filterByLocation(master_raw,master_raw);
 
         /*
-        for(int i = 0; i< clouds1.size(); i++){
-            pcl::PointCloud<pcl::PointNormal>::Ptr c (new pcl::PointCloud<pcl::PointNormal>(clouds1[i]));
+        //try to align the clouds better using ICP
+        for(int i = 0; i< clouds_raw.size(); i++){
+            pcl::PointCloud<pcl::PointNormal>::Ptr c (new pcl::PointCloud<pcl::PointNormal>(clouds_raw[i]));
             Eigen::Matrix4f transform;
             cout << "HERE" << endl;
-            if(getTransformForICPAlignment(master1,c,&transform)){
+            if(getTransformForICPAlignment(master_raw,c,&transform)){
                 pcl::transformPointCloudWithNormals(*c,*c,transform);
                 cout << transform << endl;
                 pcl::io::savePCDFileASCII ("intermediate3.pcd", *c);
@@ -488,7 +507,7 @@ int main(int argc, char*argv[]){
             }
         }
         */
-        *master = *master1;
+        *master = *master_raw;
         pcl::io::savePCDFileASCII ("intermediate.pcd", *master);
 
 
@@ -536,9 +555,11 @@ int main(int argc, char*argv[]){
         *master = *filtered;
         */
         
+
         //close the bottom of the cloud to make a semi inclosed surface
         cout << "Closing the bottom of the shape..." << endl;
-//        closeCloud(master);
+        closeCloud(master);
+
 
         //save the output to a file
         pcl::io::savePCDFileASCII ("output.pcd", *master);

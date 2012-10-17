@@ -10,7 +10,7 @@ def sort_key(file):
 base_dir = "pcd_files2"
 files = sorted(os.listdir(base_dir),key=sort_key)
 args = ""
-for f in files[0::30]:
+for f in files[0::100]:
     args += base_dir + "/" + f + " "
 command = "./bin/test_cloud_reconstruction " + args
 if len(command)>600:
@@ -62,8 +62,12 @@ def plot(points,label):
     plt.show()
 
 debug = False
-plot(translations,"Translations")
 if debug:
+    plot(translations,"Translations")
     plot(xs,"Affect on X axis")
     plot(ys,"Affect on Y axis")
     plot(zs,"Affect on Z axis")
+
+import convert
+subprocess.Popen("../PoissonRecon-amd64 --in test.pts --out out --depth 6".split(" ")).wait()
+subprocess.Popen("meshlab out.ply".split(" "))
