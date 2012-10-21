@@ -17,9 +17,11 @@ include_directories(
     ${EIGEN3_INCLUDE_DIR}
     ${BULLETSIM_SOURCE_DIR}/src
     ${BULLET_DIR}/src
+    ${WM_INCLUDE_DIR}
 )
 link_directories(
-  ${PCL_LIBRARY_DIRS}   
+    ${PCL_LIBRARY_DIRS}   
+    ${WM_LIBRARY_DIR}
 )
 
 add_definitions("-DEIGEN_DEFAULT_TO_ROW_MAJOR")
@@ -27,6 +29,12 @@ add_definitions("-DEIGEN_DEFAULT_TO_ROW_MAJOR")
 add_library(clouds geom.cpp get_table2.cpp get_chessboard_pose.cpp plane_finding.cpp utils_pcl.cpp cloud_ops.cpp utils_cv.cpp )
 #utils_ros.cpp table.cpp ros_robot.cpp)
 target_link_libraries(clouds utils ${PCL_LIBRARIES} ${OpenCV_LIBS} ${BULLET_LIBS})
+
+add_executable(calculate_checkerboard_transforms calculate_checkerboard_transforms.cpp)
+target_link_libraries(calculate_checkerboard_transforms clouds ${PCL_LIBRARIES} ${WM_LIBRARIES})
+add_executable(concatenate_clouds concatenate_clouds.cpp)
+target_link_libraries(concatenate_clouds clouds ${PCL_LIBRARIES} ${WM_LIBRARIES})
+
 if(FALSE)
 add_executable(preprocessor_node preprocessor_node.cpp)
 target_link_libraries(preprocessor_node clouds comm utils ${PCL_LIBRARIES} ${OpenCV_LIBS} ${ROS_LIBRARIES} boost_signals tf cv_bridge)
