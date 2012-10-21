@@ -11,6 +11,8 @@ from scipy import optimize
 import math
 class Arrow3D(FancyArrowPatch):
     """
+        An arrow object for a matplotlib 3d plot.
+        
         Code from http://stackoverflow.com/questions/11140163/python-matplotlib-plotting-a-3d-cube-a-sphere-and-a-vector
     """
     def __init__(self, xs, ys, zs, *args, **kwargs):
@@ -24,6 +26,9 @@ class Arrow3D(FancyArrowPatch):
         FancyArrowPatch.draw(self, renderer)
 
 class Axis3D:
+    """
+        Object to store an axis triple.
+    """
     def __init__(self,transform,*args,**kwargs):
         self.transform = np.array(transform)
         print self.transform
@@ -56,6 +61,9 @@ class TransformProcessor:
         self.rotations = []
 
     def load_file(self):
+        """
+            Load the transform from a text file.
+        """
         f = open(self.filename)
         line = f.readline()
         while line:
@@ -70,10 +78,16 @@ class TransformProcessor:
         self.update_transform_components()
 
     def update_transform_components(self):
+        """
+            Update the cached components of the transform.
+        """
         self.calculate_translations()
         self.calculate_rotations()
 
     def process(self):
+        """
+            Perform some transformations on the transform matricies.
+        """
         self.calculate_plane_to_yz_transform()
         self.transform_translations(self.plane_to_yz_transform)
         self.calculate_flatten_transform()
@@ -139,6 +153,9 @@ class TransformProcessor:
         self.rotations = new_rotations
 
     def best_fit_plane(self):
+        """
+            Find the plane that best fits the set of translations
+        """
         def zeros(i):
             return [0 for a in range(i)]
         A = np.array([zeros(3) for j in range(3)])
@@ -152,6 +169,9 @@ class TransformProcessor:
         return x
 
     def calculate_flatten_transform(self):
+        """
+            Calculate the transform to move all the translation points into the yz plane. Basically just remove the x values.
+        """
         def ave(l):
             return reduce(lambda x,y: x+y,l)/len(l)
         a = ave([t[0] for t in self.translations])
@@ -162,6 +182,9 @@ class TransformProcessor:
         self.flatten_transform = transform
 
     def calculate_plane_to_yz_transform(self):
+        """
+            Calculate the transform to rotate the plane of the circle into the yz plane.
+        """
         x = self.best_fit_plane()
         normal = [x[0],x[1],-1]
         theta = math.atan(-normal[2]/normal[1])
@@ -173,6 +196,9 @@ class TransformProcessor:
         self.plane_to_yz_transform = transform
 
     def project_transforms_to_plane(self):
+        """
+            Project the transforms onto the best fit plane.
+        """
         x = self.best_fit_plane()
         origin = np.array([0,0,x[2]])
         normal = np.array([x[0],x[1],-1])
@@ -182,6 +208,9 @@ class TransformProcessor:
         return [project_point_to_plane(point).tolist() for point in self.translations]
 
     def show(self,label="Translations"):
+        """
+            Display the transforms on a 3d plot.
+        """
         fig = plt.figure(label)
         ax = fig.add_subplot(111,projection="3d",aspect=1)
         x = [t[0] for t in self.translations]

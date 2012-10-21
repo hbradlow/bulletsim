@@ -29,6 +29,9 @@ class ReconstructionPipeline:
         self.pts_name = "output.pts"
 
     def collect_data(self):
+        """
+            Use the pcl app "pcl_openni_recorder" to record the object and store the clouds in a tmp file.
+        """
         if self.debug:
             print "Collecting point cloud data"
         try:
@@ -43,18 +46,27 @@ class ReconstructionPipeline:
         os.chdir("../")
 
     def concatenate_clouds(self):
+        """
+            Call the "concatenate_clouds" executable to combine the clouds into a single object.
+        """
         if self.debug:
             print "Cocatenating clouds"
         command = "./bin/concatenate_clouds " + self.get_files_string()
         self.run_command(command)
 
     def calculate_transforms(self):
+        """
+            Calculate the poses of the checkerboard for each cloud.
+        """
         if self.debug:
             print "Calculating transformation matricies"
         command = "./bin/calculate_checkerboard_transforms " + self.get_files_string()
         self.run_command(command)
 
     def reconstruct(self):
+        """
+            Apply a poisson reconstruction to the concatenated cloud.
+        """
         if self.debug:
             print "Performing poisson reconstruction"
         import convert
@@ -63,12 +75,18 @@ class ReconstructionPipeline:
         self.run_command(command)
 
     def show(self):
+        """
+            Open the reconstructed mesh in meshlab.
+        """
         if self.debug:
             print "Displaying mesh"
         command = "meshlab " + self.ply_name
         self.run_command(command)
 
     def get_files_string(self):
+        """
+            Generate a string of all the point clouds that will be processed by parts of the pipeline.
+        """
         #compile the command from the directory of clouds
         def sort_key(file):
             number = re.match(r'.*?(\d+)\.pcd',file).group(1)
@@ -80,6 +98,9 @@ class ReconstructionPipeline:
         return output
 
     def run_command(self,command,seconds=None):
+        """
+            Run a command on the system and keep the user updated on the completeness.
+        """
         proc = Process(command.strip().split(" "))
 
         self.display_progress(0)
@@ -106,6 +127,9 @@ class ReconstructionPipeline:
         print
 
     def display_progress(self,percent):
+        """
+            Display a text based progress bar.
+        """
         size = 60
         num_dashes = int(percent*size/100.)
         num_spaces = size-num_dashes
@@ -121,14 +145,14 @@ if __name__ == "__main__":
     pipeline.show()
 
 def test_processor():
+    """
+        A test of the transformation processor.
+    """
     tp = TransformProcessor()
     tp.load_file()
     tp.process()
     tp.show()
     return tp
-
-
-
 
 
 
