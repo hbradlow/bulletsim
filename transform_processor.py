@@ -26,6 +26,7 @@ class Arrow3D(FancyArrowPatch):
 class Axis3D:
     def __init__(self,transform,*args,**kwargs):
         self.transform = np.array(transform)
+        print self.transform
         origin = self.transform.take([3],1).flatten().tolist()
 
         xaxis = np.dot(self.transform,np.array([1,0,0,0]))
@@ -69,12 +70,14 @@ class TransformProcessor:
         self.update_transform_components()
 
     def update_transform_components(self):
-        self.translations = list(self.calculate_translations())
-        self.rotations = list(self.calculate_rotations())
+        self.calculate_translations()
+        self.calculate_rotations()
 
     def process(self):
         self.calculate_plane_to_yz_transform()
-        self.transform_plane_to_yz()
+        self.transform_translations(self.plane_to_yz_transform)
+        self.calculate_flatten_transform()
+        self.transform_translations(self.flatten_transform)
         self.calculate_best_fit_circle()
         #self.transform_plane_to_yz(inverse=True) #not sure why this isnt working...
 
@@ -90,26 +93,50 @@ class TransformProcessor:
         x = scipy.optimize.nnls(np.array(A),np.array(b))
         self.circle = x[0].tolist()
         self.circle[2] = math.sqrt(self.circle[2] + self.circle[0]**2 + self.circle[1]**2)
+        self.circle_axis = [1,0,0]
 
-    def transform_plane_to_yz(self,inverse=False):
-        for translation,rotation,(transform_index,transform) in zip(self.project_transforms_to_plane(),self.rotations,enumerate(self.transforms)):
-            if inverse:
-                t = np.linalg.inv(np.array(self.plane_to_yz_transform))
-            else:
-                t = np.array(self.plane_to_yz_transform)
+    def transform_translations(self,transform_matrix,inverse=False):
+        """
+            Transform the translations using a transform matrix
+        """
+        if inverse:
+            t = np.linalg.inv(np.array(transform_matrix))
+        else:
+            t = np.array(transform_matrix)
+        for (index,translation) in enumerate(self.translations):
             translation = np.dot(t,np.array(translation+[1])).tolist()[0:3]
-            transform.transform = [rotation[index] + [translation[index]] for index in range(3)]
-            transform.transform += [0,0,0,1]
-            self.transforms[transform_index] = transform
-        self.update_transform_components()
+            self.translations[index] = translation
+        self.calculate_transforms()
 
+    def calculate_transforms(self):
+        """
+            Calculate the transforms from the translations and rotations
+        """
+        new_transforms = []
+        for translation,rotation in zip(self.translations,self.rotations):
+            transform = Transform()
+            transform.is_valid = True
+            transform.transform = [rotation[index] + [translation[index]] for index in range(3)] + [[0,0,0,1]]
+            new_transforms.append(transform)
+        self.transforms = new_transforms
+    
     def calculate_translations(self):
+        """
+            Calculate the translations from the transforms
+        """
+        new_translations = []
         for transform in self.transforms:
-            yield [t[3] for t in transform.transform[0:3]]
+            new_translations.append([t[3] for t in transform.transform[0:3]])
+        self.translations = new_translations
 
     def calculate_rotations(self):
+        """
+            Calculate the rotations from the transforms
+        """
+        new_rotations = []
         for transform in self.transforms:
-            yield [t[0:3] for t in transform.transform[0:3]]
+            new_rotations.append([t[0:3] for t in transform.transform[0:3]])
+        self.rotations = new_rotations
 
     def best_fit_plane(self):
         def zeros(i):
@@ -123,6 +150,16 @@ class TransformProcessor:
             b = np.add(np.array([point[0]*point[2],point[1]*point[2],point[2]]),b)
         x = np.linalg.solve(A,b)
         return x
+
+    def calculate_flatten_transform(self):
+        def ave(l):
+            return reduce(lambda x,y: x+y,l)/len(l)
+        a = ave([t[0] for t in self.translations])
+        transform = [   [1,0,0,-a],
+                        [0,1,0,0],
+                        [0,0,1,0],
+                        [0,0,0,1]]
+        self.flatten_transform = transform
 
     def calculate_plane_to_yz_transform(self):
         x = self.best_fit_plane()
@@ -150,14 +187,14 @@ class TransformProcessor:
         x = [t[0] for t in self.translations]
         y = [t[1] for t in self.translations]
         z = [t[2] for t in self.translations]
-        def ave(l):
-            return reduce(lambda x,y: x+y,l)/len(l)
         """
         for t in self.transforms:
             a = Axis3D(t.transform)
             for arrow in a.arrows:
                 ax.add_artist(arrow)
         """
+        circle_axis = Arrow3D((0,self.circle_axis[0]),(self.circle[0],self.circle[0]+self.circle_axis[1]),(self.circle[1],self.circle[1]+self.circle_axis[2]),mutation_scale=20,lw=3,arrowstyle="-|>", color="g")
+        ax.add_artist(circle_axis)
         ax.scatter(x,y,z)
         circle = Circle((self.circle[0], self.circle[1]), self.circle[2],fill=False)
         ax.add_patch(circle)
