@@ -24,6 +24,8 @@ class Arrow3D(FancyArrowPatch):
         xs, ys, zs = proj3d.proj_transform(xs3d, ys3d, zs3d, renderer.M)
         self.set_positions((xs[0],ys[0]),(xs[1],ys[1]))
         FancyArrowPatch.draw(self, renderer)
+    def __repr__(self):
+        print self._verts3d
 
 class Axis3D:
     """
@@ -59,6 +61,14 @@ class Transform:
     def __init__(self):
         self.is_valid = False
         self.transform = [[0 for i in range(4)] for j in range(4)]
+        self.q = []
+    def calculate_quaternion(self):
+        from cgkit.cgtypes import quat, mat3, slerp
+        q = quat()
+        mat = mat3([num for row in self.transform[0:3] for num in row[0:3]])
+        mat = mat.decompose()[0]
+        q.fromMat(mat)
+        self.q = np.dot(np.array([q.x,q.y,q.z]),q.w).tolist()
         
 class TransformProcessor:
     def __init__(self,filename="transforms.txt"):
@@ -82,8 +92,8 @@ class TransformProcessor:
         f = open(self.filename,"w")
         for transform in self.transforms:
             f.write("TRANSFORM\n")
-            f.write("1\n")
-            #f.write(("1" if transform.is_valid else "0") + "\n")
+            #f.write("1\n")
+            f.write(("1" if transform.is_valid else "0") + "\n")
             for row in transform.transform:
                 f.write(" ".join([str(num) for num in row]) + "\n")
             f.write("\n")
@@ -132,6 +142,9 @@ class TransformProcessor:
         self.mark_transforms_invalid()
         #self.sort_transforms_by_circle_angle()
         self.interpolate_transforms_along_circle()
+        for transform in self.transforms:
+            if transform.is_valid:
+                transform.calculate_quaternion()
 
         #undo the intermediate transformations
         self.transform_transforms(self.flatten_transform,inverse=True)
@@ -225,10 +238,10 @@ class TransformProcessor:
         def set_norm(vector,length):
             return np.dot(vector,length/np.linalg.norm(vector))
 
-        origin = np.array(self.circle.origin)
+        origin = np.array(self.circle.origin[1:])
 
-        p_start = np.array(self.translations[index_start])
-        p_end = np.array(self.translations[index_end])
+        p_start = np.array(self.translations[index_start][1:])
+        p_end = np.array(self.translations[index_end][1:])
 
         v_start = np.add(p_start,np.dot(-1,origin))
         v_end = np.add(p_end,np.dot(-1,origin))
@@ -252,7 +265,7 @@ class TransformProcessor:
             v_current = np.dot((math.sin((1-t)*angle)/math.sin(angle)),v_start) + np.dot((math.sin(t*angle)/math.sin(angle)),v_end)
         p_current = np.add(v_current,origin)
 
-        return p_current.tolist()[0:3]
+        return [0] + p_current.tolist()[0:2]
 
     def angle_between_translations(self,t1,t2):
         base_vector = np.array([0,0,1])
@@ -266,8 +279,9 @@ class TransformProcessor:
         good_index = None
         for (index,transform) in enumerate(self.transforms):
             enclosing_transforms = self.valid_enclosing_transforms(index)
-            self.translations[index] = self.slerp_translations(enclosing_transforms[0],index,enclosing_transforms[1])
-            self.rotations[index] = self.slerp_rotations(enclosing_transforms[0],index,enclosing_transforms[1])
+            if enclosing_transforms[0] <= enclosing_transforms[1]:
+                self.translations[index] = self.slerp_translations(enclosing_transforms[0],index,enclosing_transforms[1])
+                self.rotations[index] = self.slerp_rotations(enclosing_transforms[0],index,enclosing_transforms[1])
             """
             else:
                 if good_index:
@@ -396,25 +410,36 @@ class TransformProcessor:
             return np.add(point,np.dot(-1,np.dot(normal,np.dot(normal,to_p))))
         return [project_point_to_plane(point).tolist() for point in self.translations]
 
-    def show(self,label="Translations"):
+    def show(self,label="Translations",label_q="Quaternions"):
         """
             Display the transforms on a 3d plot.
         """
+        self.transform_transforms(self.plane_to_yz_transform)
+        self.transform_transforms(self.flatten_transform)
+
         fig = plt.figure(label)
+        fig2 = plt.figure(label_q)
         ax = fig.add_subplot(111,projection="3d",aspect=1)
+        ax_quats = fig2.add_subplot(111,projection="3d",aspect=1)
+        
         x = []; y = []; z = []
+        q_x = []; q_y = []; q_z = []
         x_n = []; y_n = []; z_n = []
         for translation,transform in zip(self.translations,self.transforms):
             if transform.is_valid:
                 x.append(translation[0])
                 y.append(translation[1])
                 z.append(translation[2])
+                q_x.append(transform.q[0])
+                q_y.append(transform.q[1])
+                q_z.append(transform.q[2])
             if not transform.is_valid:
                 x_n.append(translation[0])
                 y_n.append(translation[1])
                 z_n.append(translation[2])
         ax.scatter(x,y,z,color="b",s=200)
         ax.scatter(x_n,y_n,z_n,color="r",s=200)
+        ax_quats.scatter(q_x,q_y,q_z,color="g",s=200)
 
         if self.show_transform_axis:
             for t in self.transforms:
@@ -431,3 +456,6 @@ class TransformProcessor:
         art3d.pathpatch_2d_to_3d(circle, z=0, zdir="x")
         ax.auto_scale_xyz([-.5, .5], [-.5, .5], [-0, 1])
         plt.show()
+
+        self.transform_transforms(self.flatten_transform,inverse=True)
+        self.transform_transforms(self.plane_to_yz_transform,inverse=True)

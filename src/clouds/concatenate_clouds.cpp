@@ -63,7 +63,8 @@ int main(int argc, char*argv[]){
                 }
             }
         }
-        pcl::io::savePCDFileASCII ("intermediate.pcd", *master);
+        
+        //pcl::io::savePCDFileASCII ("intermediate.pcd", *master);
 
 
         //filter by statical outliers
@@ -74,6 +75,7 @@ int main(int argc, char*argv[]){
         sor.setStddevMulThresh (3.0);
         sor.filter (*filtered);
         *master = *filtered;
+        
         
         //downsample the cloud
         cout << "Downsampling the cloud..." << endl;

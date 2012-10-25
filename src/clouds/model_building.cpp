@@ -37,7 +37,7 @@ typedef pcl::PointCloud<pcl::PointNormal>::Ptr HCloudPtr;
 #define X_UPPER_BOUND           0.35
 #define Y_LOWER_BOUND           -0.1
 #define Y_UPPER_BOUND           0.1
-#define Z_LOWER_BOUND           0.01
+#define Z_LOWER_BOUND           0.015
 #define Z_UPPER_BOUND           1.0
 
 //size of leaf to use for downsampling

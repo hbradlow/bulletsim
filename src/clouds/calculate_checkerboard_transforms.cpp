@@ -32,7 +32,8 @@ int main(int argc, char*argv[]){
 
             //calculate the transform of the board
             Eigen::Matrix4f transform;
-            int found = getChessBoardPose(tmp,6,9,.0172,transform);
+            int found = getChessBoardPose(tmp,4,9,.02,transform);
+            //int found = getChessBoardPose(tmp,6,9,.0172,transform);
             transforms.push_back(transform);
             if(found){
                 success_mask.push_back(1); //indicate that the checkerboard was found
