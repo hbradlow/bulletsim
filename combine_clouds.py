@@ -28,6 +28,8 @@ class ReconstructionPipeline:
         self.pcd_name = "output.pcd"
         self.pts_name = "output.pts"
 
+        self.poisson_depth = 6
+
     def collect_data(self):
         """
             Use the pcl app "pcl_openni_recorder" to record the object and store the clouds in a tmp file.
@@ -50,7 +52,7 @@ class ReconstructionPipeline:
             Call the "concatenate_clouds" executable to combine the clouds into a single object.
         """
         if self.debug:
-            print "Cocatenating clouds"
+            print "Concatenating clouds"
         command = "./bin/concatenate_clouds " + self.get_files_string()
         self.run_command(command)
 
@@ -71,7 +73,7 @@ class ReconstructionPipeline:
             print "Performing poisson reconstruction"
         import convert
         convert.pcd_to_pts(open(self.pcd_name),open(self.pts_name,"w"))
-        command = "../PoissonRecon-amd64 --in " + self.pts_name + " --out " + self.ply_name.split(".")[0] + " --depth 6"
+        command = "../PoissonRecon-amd64 --in " + self.pts_name + " --out " + self.ply_name.split(".")[0] + " --depth " + str(self.poisson_depth)
         self.run_command(command)
 
     def show(self):
@@ -136,23 +138,32 @@ class ReconstructionPipeline:
         s = "[" + "".join(["-" for i in range(num_dashes)]) + "".join([" " for i in range(num_spaces)]) + "] " + str(round(percent,2)) + "%"
         print s, "\r",
 
-if __name__ == "__main__":
-    pipeline = ReconstructionPipeline(skip=100,debug=True,base_dir="tmp_combine_clouds")
-    pipeline.collect_data()
-    pipeline.calculate_transforms()
-    pipeline.concatenate_clouds()
-    pipeline.reconstruct()
-    pipeline.show()
-
-def test_processor():
+def process_transforms():
     """
         A test of the transformation processor.
     """
     tp = TransformProcessor()
-    tp.load_file()
+    tp.load_from_file()
     tp.process()
+    tp.output_to_file()
     tp.show()
-    return tp
+
+if __name__ == "__main__":
+    import time
+    start = time.time()
+    pipeline = ReconstructionPipeline(skip=60,debug=True,base_dir="tmp_combine_clouds")
+    #pipeline.collect_data()
+    pipeline.calculate_transforms()
+
+    process_transforms()
+    
+    pipeline.concatenate_clouds()
+    pipeline.reconstruct()
+    end = time.time()
+    print "Took",str(round(end-start,2)),"seconds to comlete"
+    
+    pipeline.show()
+
 
 
 

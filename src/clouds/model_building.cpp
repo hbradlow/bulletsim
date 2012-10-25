@@ -33,8 +33,8 @@ typedef pcl::PointCloud<pcl::PointNormal>::Ptr HCloudPtr;
 
 //these values are measured values from the setup
 //specifies the bouding box around the object being scanned
-#define X_LOWER_BOUND           -0.33
-#define X_UPPER_BOUND           -0.18
+#define X_LOWER_BOUND           0.18
+#define X_UPPER_BOUND           0.35
 #define Y_LOWER_BOUND           -0.1
 #define Y_UPPER_BOUND           0.1
 #define Z_LOWER_BOUND           0.01
