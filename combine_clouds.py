@@ -152,7 +152,7 @@ if __name__ == "__main__":
     import time
     start = time.time()
     pipeline = ReconstructionPipeline(skip=60,debug=True,base_dir="tmp_combine_clouds")
-    #pipeline.collect_data()
+    pipeline.collect_data()
     pipeline.calculate_transforms()
 
     process_transforms()
